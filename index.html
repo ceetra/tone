@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tone">
+<meta name="theme-color" content="#0f1115">
+<title>Tone</title>
+<style>
+:root{--bg:#0f1115;--c1:#1a1d24;--c2:#242836;--tx:#e8eaf0;--mu:#9aa3b5;--ac:#7c5cff;--ok:#2ecc71;--mid:#f1c40f;--off:#e67e22;--bad:#e74c3c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 -apple-system,system-ui,sans-serif}
+#app{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 8px) 14px calc(90px + env(safe-area-inset-bottom))}
+.hd{display:flex;justify-content:space-between;align-items:center;padding:6px 0 12px}
+.hd b{font-size:22px}
+.chip{background:var(--c1);border-radius:20px;padding:5px 11px;font-size:14px;margin-left:6px;display:inline-block}
+.card{background:var(--c1);border-radius:16px;padding:14px;margin:10px 0}
+.q{cursor:pointer}
+.mu{color:var(--mu);font-size:14px}
+.btn{display:block;width:100%;background:var(--ac);color:#fff;border:0;border-radius:14px;padding:15px;font-size:17px;font-weight:600;margin:14px 0}
+.btn.s{background:var(--c2);color:var(--tx)}
+.opt{display:block;width:100%;text-align:left;background:var(--c1);color:var(--tx);border:1px solid var(--c2);border-radius:14px;padding:14px;margin:8px 0;font-size:16px}
+.mini{background:var(--c2);color:var(--tx);border:0;border-radius:10px;padding:6px 12px;margin-right:8px;font-size:14px}
+.npc{background:var(--c2);border-radius:16px;padding:14px;margin:10px 0;font-size:18px}
+.ru{color:var(--mu);font-size:15px;margin-top:8px}
+.hide{display:none}
+details{background:var(--c1);border-radius:12px;padding:10px 12px;margin:8px 0}
+summary{cursor:pointer;color:var(--ac)}
+.res{background:var(--c1);border:2px solid;border-radius:14px;padding:12px;margin:10px 0;opacity:.85}
+.res.sel{opacity:1}
+.vt{font-weight:700;font-size:14px;margin-bottom:4px}
+.en{font-size:17px;margin-bottom:4px}
+.tag{font-size:13px;color:var(--mu)}
+.re{margin-top:8px;padding:8px 10px;background:var(--c2);border-radius:10px;font-style:italic}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:#14171dee;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);padding:6px 6px calc(8px + env(safe-area-inset-bottom))}
+nav button{flex:1;background:none;border:0;color:var(--mu);font-size:12px;padding:6px 2px}
+nav button.on{color:var(--ac)}
+nav span{display:block;font-size:20px}
+input,textarea{width:100%;background:var(--c2);color:var(--tx);border:1px solid #333a4d;border-radius:12px;padding:12px;font-size:16px;margin:6px 0;font-family:inherit}
+.tile{display:inline-block;background:var(--c2);border-radius:10px;padding:9px 12px;margin:4px;font-size:16px;border:0;color:var(--tx)}
+.ans{min-height:56px;background:var(--c1);border:1px dashed #444c63;border-radius:12px;padding:6px;margin:10px 0}
+.dots i{display:inline-block;width:9px;height:9px;border-radius:50%;background:#3a4054;margin-right:3px}
+.dots i.on{background:var(--ac)}
+.row{margin-top:10px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KEY='tone_v1';
+let S;try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+S=S||{xp:0,streak:0,last:'',done:{},cards:{},traps:[]};
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const today=()=>ymd(new Date());
+const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return ymd(d)};
+function touch(){const t=today();if(S.last!==t){S.streak=(S.last===addDays(-1))?S.streak+1:1;S.last=t}}
+function xp(n){touch();S.xp+=n;save()}
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+const norm=s=>String(s).toLowerCase().replace(/[’‘]/g,"'").replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim();
+const Q={best:['Отлично','var(--ok)'],ok:['Допустимо','var(--mid)'],off:['Грамматика ок, регистр не тот','var(--off)'],bad:['Ошибка','var(--bad)']};
+const P={best:3,ok:2,off:1,bad:0};
+const INT=[0,1,3,7,14,30];
+function say(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=.9;speechSynthesis.speak(u)}catch(e){}}
+
+const REG={
+formal:{n:`Формальный`,e:`👔`,s:5,ok:`Почти ничего.`,no:`Сленг, усечения (gonna, wanna), грубые просьбы без смягчения, любые ошибки во временах и артиклях.`},
+casual:{n:`Чат / неформальный`,e:`💬`,s:2,ok:`Сокращения (rn, u), строчные буквы, обрывки без подлежащего в устойчивых фразах («Still available»), междометия.`,no:`Времена, порядок слов, модальные + инфинитив, артикли там, где они меняют смысл.`},
+street:{n:`Улица / рэп`,e:`🎤`,s:1,ok:`ain't, двойное отрицание, tryna / finna / gonna, пропуск is/are в части диалектов (например, AAVE: у него свои строгие правила, это не «ошибки»).`,no:`Случайные ошибки: сленг меняет конкретные правила, а не отменяет все. И слова, принадлежащие только «своим» (особенно n-word): не повторяй их даже тогда, когда они звучат в песнях, из уст чужака это тяжёлое оскорбление.`},
+family:{n:`Семья`,e:`🏠`,s:2,ok:`Сокращения, ласковые обращения (sweetheart, hon), разговорные обороты, незаконченные фразы.`,no:`Резкие просьбы без смягчения, холодные односложные ответы на заботу, базовые грамматические ошибки.`},
+book:{n:`Книжный / литературный`,e:`📖`,s:5,ok:`Почти ничего.`,no:`Разговорные вставки (like, you know), пустые усилители вместо точных слов, ошибки в условных и придаточных. Ценятся точная лексика и сложные конструкции.`}
+};
+
+const SC=[
+{id:`label`,reg:`formal`,t:`Питч на лейбле`,set:`Ты пришёл на встречу с A&R-менеджером лейбла (Ms. Carter). Нужно произвести хорошее впечатление.`,
+steps:[
+{npc:`Good afternoon. Please, have a seat. What brings you in today?`,ru:`Добрый день. Присаживайтесь. С чем пришли?`,
+lens:[[`What brings you in?`,`Вежливая формула «по какому вопросу вы пришли». Буквально «что вас сюда привело». Нейтрально-формальная, звучит в офисах и магазинах.`],[`have a seat`,`То же, что sit down, но мягче. «Sit down!» звучит как команда.`]],
+o:[
+{t:`Good afternoon, and thank you for seeing me. I'd like to present my latest single.`,tr:`Добрый день, спасибо, что приняли меня. Я хотел бы представить свой новый сингл.`,q:`best`,r:`formal`,w:`«I'd like to» (= I would like to) — стандартный вежливый способ сказать «я хочу». Благодарность в начале («thank you for seeing me») задаёт тон. «Single» — точное слово индустрии для песни, выпущенной как релиз.`,re:`Ms. Carter smiles: «Wonderful. Let's hear it.»`},
+{t:`Yo, I got a track, you gotta hear it.`,tr:`Йоу, у меня есть трек, тебе надо его послушать.`,q:`off`,r:`street`,w:`Грамматика уличной речи тут последовательна («I got» вместо «I've got», «gotta» = have to). Но на деловой встрече с незнакомым человеком это звучит дерзко: «you gotta hear it» — давление на собеседника. Среди друзей-артистов такая фраза была бы в порядке.`,re:`Ms. Carter raises an eyebrow: «Right. Let's… see.»`},
+{t:`I want to show you my song.`,tr:`Я хочу показать тебе мою песню.`,q:`ok`,r:`casual`,w:`Грамматически верно, но «I want» звучит прямолинейно, как у ребёнка; в формальной ситуации его заменяют на «I'd like to». И «song» — просто песня, а в индустрии говорят «track», «single», «demo».`,re:`«Sure,» says Ms. Carter, a little flatly.`}
+]},
+{npc:`Interesting. Could you tell me a little about your background?`,ru:`Интересно. Расскажете немного о себе и своём опыте?`,
+lens:[[`background`,`В деловом контексте — ваш опыт и профессиональный путь. Не «фон». Спрашивают про образование и работу.`],[`a little`,`Смягчает просьбу: «расскажите немного». Без него вопрос звучит как допрос.`]],
+o:[
+{t:`I've been releasing music independently since 2024, and I've recently been working on my mixing.`,tr:`Я независимо выпускаю музыку с 2024 года, а недавно занимался сведением.`,q:`best`,r:`formal`,w:`«Since 2024» требует Present Perfect: «I've been releasing» — действие началось в прошлом и продолжается. «Independently» — «самостоятельно, без лейбла»; точное слово вместо расплывчатого «by myself».`,re:`She nods and makes a note.`},
+{t:`I make music since 2024.`,tr:`Я делаю музыку с 2024.`,q:`bad`,r:`casual`,w:`Классика для русскоговорящих: по-русски «делаю с 2024» (настоящее время), а в английском с since/for нужен Present Perfect: «I've been making music since 2024». Это ошибка в любом регистре, даже в чате с другом. Запомни: since + точка во времени (2024), for + период (two years).`,re:`Ms. Carter pauses: «You… make music? Since 2024?»`},
+{t:`Well, basically, I do music for like two years or so.`,tr:`Ну, в общем, занимаюсь музыкой типа двух лет или около того.`,q:`bad`,r:`casual`,w:`Две проблемы. 1) «Do music» — не сочетание: музыку «make» или «produce» (do — «do homework»). 2) «For two years» с настоящим временем снова требует Present Perfect («I've been making music for two years»). Вставки «basically», «like», «or so» среди друзей нормальны, но на питче размывают уверенность.`,re:`She tilts her head: «Two years or so… alright.»`}
+]},
+{npc:`We'll review the demo and get back to you. Is there anything else you'd like to add?`,ru:`Мы изучим демо и свяжемся с вами. Хотите что-то добавить?`,
+lens:[[`get back to you`,`Фразовый глагол: «вернуться к вам с ответом». Стандартная вежливая отписка после собеседований и встреч.`],[`demo`,`Черновая запись для лейбла. Не путай с «presentation» (презентация).`]],
+o:[
+{t:`Thank you for your time. I'd be happy to send over any additional material you may need.`,tr:`Спасибо за уделённое время. С радостью пришлю любые дополнительные материалы, которые понадобятся.`,q:`best`,r:`formal`,w:`«Thank you for your time» — стандартное закрытие деловой встречи. «I'd be happy to» — вежливое предложение помощи. «Send over» мягче, чем «send». «May need» — осторожное «может понадобиться».`,re:`«Please do,» she says, standing to shake your hand.`},
+{t:`Nah, that's all. Just hit me up when you decide.`,tr:`Не, это всё. Просто напиши мне, когда решите.`,q:`off`,r:`street`,w:`«Nah» и «hit me up» — нормальные уличные выражения, но здесь звучат как отмашка. Грамматика не нарушена, нарушен регистр.`,re:`She gives a thin smile: «We'll be in touch.»`},
+{t:`No, thanks. Please call me when you will decide.`,tr:`Нет, спасибо. Пожалуйста, позвоните мне, когда решите.`,q:`bad`,r:`formal`,w:`После when/if/once/as soon as о будущем действии ставят Present Simple: «when you decide». «Will» здесь — ошибка в любом регистре; русское «когда вы решите» провоцирует будущее время. И «No, thanks» слишком сухо — лучше «No, that's everything, thank you».`,re:`«I'm sure we will,» she says, a little stiffly.`}
+]}
+],
+keys:[
+{en:`I'd like to present my latest single.`,ru:`Я хотел бы представить свой новый сингл.`,note:`I'd like to — вежливое «хочу» для незнакомых и официальных ситуаций; I want звучит прямолинейно.`,k:`I'd like to`},
+{en:`I've been making music since 2024.`,ru:`Я занимаюсь музыкой с 2024 года.`,note:`since + точка во времени → Present Perfect (Continuous). С for + период то же правило.`,k:`I've been making`},
+{en:`Please call me when you decide.`,ru:`Позвоните мне, когда решите.`,note:`После when/if/once о будущем действии — Present Simple, не will.`,k:`decide`}
+]},
+
+{id:`depop`,reg:`casual`,t:`Покупатель в чате`,set:`Ты продаёшь японскую куртку на Depop. Покупатель пишет в чат. Здесь всё быстро и коротко, но не бессмысленно.`,
+steps:[
+{npc:`hey! is this jacket still available?`,ru:`Привет! Эта куртка ещё в наличии?`,
+lens:[[`still available`,`«Ещё в наличии». Спрашивают про товар в онлайн-продаже. Фраза-обрывок, подлежащее подразумевается.`],[`hey!`,`Неформальное приветствие. Подходит для чата, но не для деловых писем.`]],
+o:[
+{t:`Hey! Yep, still available 🙂`,tr:`Привет! Ага, ещё в наличии 🙂`,q:`best`,r:`casual`,w:`«Yep» = yes (неформально). «Still available» без подлежащего — норма для чата: «it's» опускают, когда ясно, о чём речь. Смайлик — часть тона.`,re:`Buyer: «awesome!! 😊»`},
+{t:`Good day. The item you are inquiring about remains available for purchase.`,tr:`Добрый день. Товар, о котором вы справляетесь, остаётся доступным для покупки.`,q:`off`,r:`formal`,w:`Безупречно по грамматике, но так пишут юристы и роботы. В чате это создаёт дистанцию или подозрение на бота. Подстраивай длину и формальность под собеседника.`,re:`Buyer: «...is this a bot lol»`},
+{t:`yes is available`,tr:`да есть в наличии`,q:`bad`,r:`casual`,w:`Строчные буквы и отсутствие точки в чате допустимы, но «is available» без подлежащего — ошибка. Опускать можно только в устойчивых обрывках («Still available», «Sounds good»). Нужно «yes it's available». Русское «есть в наличии» работает без подлежащего, английское — нет.`,re:`Buyer: «ok? so can i buy it»`}
+]},
+{npc:`cool. would you take 80 for it? that's all i've got rn`,ru:`Круто. Отдадите за 80? Это всё, что у меня сейчас есть.`,
+lens:[[`would you take 80`,`«Согласитесь ли на 80». Торг: take = принять цену. Валюту не называют, она ясна из контекста.`],[`rn`,`Right now — сокращение только для переписки. В речи его не произносят.`],[`that's all I've got`,`«Это всё, что у меня есть» — нейтрально, даёт понять, что бюджет ограничен.`]],
+o:[
+{t:`Hmm, I can do 90 and that's my lowest. It's in great condition.`,tr:`Хмм, могу за 90 — это моя минимальная цена. Она в отличном состоянии.`,q:`best`,r:`casual`,w:`«I can do 90» — идиома торга: «могу отдать за 90». «That's my lowest» = «ниже не пойду». «In great condition» — стандартное описание состояния вещей. Довод в конце помогает не потерять покупателя.`,re:`Buyer: «ok 90 works, deal»`},
+{t:`No. The price is 100. Not negotiable.`,tr:`Нет. Цена 100. Не обсуждается.`,q:`off`,r:`formal`,w:`Грамматика верна, но «No.» в начале и «Not negotiable» звучат холодно, как команда. В торговле отказ смягчают: «Sorry, I can't go that low, but I can do 90».`,re:`Buyer: «ok never mind then»`},
+{t:`I can't to lower the price, sorry.`,tr:`Я не могу снизить цену, извини.`,q:`bad`,r:`casual`,w:`После can/can't/could/should/must идёт инфинитив без «to»: «I can't lower the price». Ошибка в любом регистре. «Sorry» в конце хорошо смягчает.`,re:`Buyer: «np, what about 85?»`}
+]},
+{npc:`deal! can u ship it to Berlin?`,ru:`Договорились! Можешь отправить в Берлин?`,
+lens:[[`ship`,`Отправить товар службой доставки. Британцы часто говорят «post», американцы — «ship» или «mail».`],[`u`,`You — только в сообщениях. В обычной речи и в письмах это выглядит небрежно.`],[`deal!`,`«Договорились!» — короткая форма согласия после торга.`]],
+o:[
+{t:`Deal! Yeah, shipping to Berlin is fine — I'll send you the tracking number once it's posted.`,tr:`Договорились! Да, отправка в Берлин подойдёт — пришлю номер отслеживания, как только отправлю.`,q:`best`,r:`casual`,w:`«I'll» — спонтанное решение или обещание. «Once it's posted» — после once время Present (не «once it will be»). «Posted» — британское «отправлено почтой»; американцы чаще скажут «shipped» или «mailed».`,re:`Buyer: «you're the best, thank u!!»`},
+{t:`Of course. I shall dispatch the parcel forthwith.`,tr:`Конечно. Незамедлительно отправлю посылку.`,q:`off`,r:`book`,w:`«Shall», «dispatch», «forthwith» — очень формально и устарело. В переписке звучит как пародия на старый роман. Такие слова живут в юридических текстах и литературе.`,re:`Buyer: «lmao ok shakespeare»`},
+{t:`Yes, i send it tomorrow.`,tr:`Да, отправлю завтра.`,q:`bad`,r:`casual`,w:`Present Simple — для расписаний («the shop opens at 9»). Спонтанное решение или обещание — «I'll send it tomorrow»; уже согласованный план — «I'm sending it tomorrow». Строчная «i» в чате допустима, а время — нет.`,re:`Buyer: «ok great, tomorrow then»`}
+]}
+],
+keys:[
+{en:`Yep, still available.`,ru:`Да, ещё в наличии.`,note:`В чате подлежащее можно опустить в устойчивых обрывках («Still available», «Sounds good»), но не в «is available».`,k:`still available`},
+{en:`I can do 90, and that's my lowest.`,ru:`Могу за 90, и это моя минимальная цена.`,note:`I can do + цена — идиома торга.`,k:`I can do`},
+{en:`I'll send you the tracking number once it's posted.`,ru:`Пришлю номер отслеживания, как только отправлю.`,note:`I'll — обещание; once + Present (не will). posted — британское; в США чаще shipped/mailed.`,k:`once it's posted`}
+]},
+
+{id:`studio`,reg:`street`,t:`Студия: сессия с рэпером`,set:`Ты в студии с рэпером Marcus. Он слушал твой бит и хочет записать куплет. Речь быстрая, сленговая.`,
+steps:[
+{npc:`Yo, what's good? You the one who sent me that beat?`,ru:`Йоу, как оно? Это ты прислал мне этот бит?`,
+lens:[[`what's good?`,`Приветствие в уличной речи — «как дела / что нового». Не вопрос о качестве чего-либо. Отвечают тем же или «not much, you?».`],[`You the one`,`Пропущено «are»: «You the one who…?». В разговорной речи вопрос иногда строят одной интонацией.`],[`beat`,`Инструментал, музыкальная основа трека. Не «bit» и не «rhythm».`]],
+o:[
+{t:`What's good! Yeah, that was me. Glad you checked it out.`,tr:`Как оно! Да, это был я. Рад, что ты послушал.`,q:`best`,r:`street`,w:`Ты отвечаешь на «what's good» таким же приветствием — это не вопрос о качестве, а «здорово». «That was me» + «glad you checked it out» — естественно и тепло.`,re:`Marcus grins: «Yeah, it's crazy. Come in.»`},
+{t:`Hello, sir. Yes, I am the person who sent the beat.`,tr:`Здравствуйте, сэр. Да, я тот человек, который отправил бит.`,q:`off`,r:`formal`,w:`Грамматика безупречна, регистр — нет. Звучит как сотрудник банка, и собеседник не поймёт, что ты «свой». Формальность в чужом регистре — тоже промах.`,re:`Marcus laughs: «Sir? Bro, relax.»`},
+{t:`Yeah, I am send it. Is it good for you?`,tr:`Да, я отправил. Тебе хорошо?`,q:`bad`,r:`street`,w:`«I am send» — смесь «I sent» и «I'm sending». Сленг меняет определённые правила (ain't, пропуск is), но базовые времена остаются. «Is it good for you?» — калька: говорят «Did you like it?» или «You feeling it?».`,re:`Marcus squints: «Say what?»`}
+]},
+{npc:`That beat goes hard. You tryna lay a verse on it tonight?`,ru:`Бит жёсткий. Хочешь записать куплет на него сегодня?`,
+lens:[[`goes hard`,`О музыке/треке — «жёстко, мощно, круто». Не про «твёрдость».`],[`tryna`,`Trying to, но в значении «собираешься / хочешь»: «You tryna come?» = «Ты хочешь пойти?».`],[`lay a verse`,`Записать куплет. lay — «положить» слоем на бит.`]],
+o:[
+{t:`Say less. I got a verse ready, been sitting on it for a minute.`,tr:`Без слов, я в деле. У меня готов куплет, лежит уже давно.`,q:`best`,r:`street`,w:`«Say less» = «можешь не объяснять, я в деле». «I got a verse ready» — опущено «'ve» (разговорно). «Been sitting on it» — держу при себе; «for a minute» = «довольно давно» (не буквально минуту!).`,re:`Marcus nods: «Say less. Let's get it.»`},
+{t:`Yes, I would be delighted to record a verse this evening.`,tr:`Да, с радостью запишу куплет сегодня вечером.`,q:`off`,r:`formal`,w:`Грамматика идеальна, но «I would be delighted» — формальная английская вежливость. С рэпером в студии выглядит как насмешка или будто ты читаешь с бумаги.`,re:`Marcus: «Delighted? Aight, you funny.»`},
+{t:`Yeah, I wanna do it, I ain't got no problem with that.`,tr:`Да, хочу, у меня нет никаких проблем с этим.`,q:`ok`,r:`street`,w:`В формальном английском «ain't got no» — ошибка (двойное отрицание), а в уличной речи это норма диалекта (в том числе AAVE) со своими правилами. Нюанс: иностранцу легко переиграть и прозвучать пародийно. Безопаснее: «Yeah, I'm down. No problem.»`,re:`Marcus laughs: «Ha, alright, alright.»`}
+]},
+{npc:`Bet. Hit me up when you pull up, I'll send the address.`,ru:`Окей, договорились. Напиши, когда подъедешь, я скину адрес.`,
+lens:[[`bet`,`«Договорились / окей». Не про ставки; ответ-согласие в сленге.`],[`hit me up`,`Связаться со мной — написать или позвонить. Без «up» («hit me») звучит как «ударь меня».`],[`pull up`,`Подъехать, появиться на месте. Часто про машину, но можно и про человека пешком.`]],
+o:[
+{t:`Bet. I'll hit you up when I'm outside.`,tr:`Окей. Напишу, когда буду снаружи.`,q:`best`,r:`street`,w:`«Bet» = окей. «Hit you up» = связаться. «When I'm outside» — после when Present, будущее не нужно. Короткая нейтральная реплика, ничего лишнего.`,re:`Marcus: «Aight, cool.»`},
+{t:`Bet. I'm pull up at eight.`,tr:`Окей. Я подъезжаю в восемь (с ошибкой).`,q:`bad`,r:`street`,w:`«I'm pull up» смешивает «I'll pull up» и «I'm pulling up». Сленг допускает свои сокращения, но не склейку двух форм подряд. Нужно «I'll pull up» или «I'm pulling up».`,re:`Marcus: «Huh? You pulling up at eight? Cool.»`},
+{t:`Excellent. I will arrive at eight o'clock sharp.`,tr:`Отлично. Я прибуду ровно в восемь часов.`,q:`off`,r:`formal`,w:`Корректно по-английски, но звучит как ответ на деловое приглашение. На «Bet» естественно отвечают «Bet», «Aight» или «I'll pull up at eight».`,re:`Marcus: «Okay… formal, but cool.»`}
+]}
+],
+keys:[
+{en:`What's good?`,ru:`Как оно? / Что нового? (приветствие)`,note:`Не вопрос о качестве, а приветствие в уличной речи. Отвечают тем же или «Not much, you?».`,k:`What's good`},
+{en:`Say less.`,ru:`Понял, без слов (я в деле).`,note:`Согласие без лишних объяснений. Только неформально.`,k:`Say less`},
+{en:`I'll hit you up when I'm outside.`,ru:`Напишу, когда буду у входа.`,note:`hit someone up — связаться (написать / позвонить). После when — Present.`,k:`hit you up`}
+]},
+
+{id:`dinner`,reg:`family`,t:`Ужин у бабушки друга`,set:`Ты в гостях у семьи американского друга. Бабушка Rose встречает тебя на пороге. Здесь тепло, и важнее не грамматика, а мягкость тона.`,
+steps:[
+{npc:`Come on in, sweetheart! Are you hungry?`,ru:`Заходи, дорогой! Ты голоден?`,
+lens:[[`sweetheart`,`Ласковое обращение старшего к младшему. От незнакомого сверстника может прозвучать неуместно.`],[`Come on in`,`Тёплое приглашение: «come in» + «on» добавляет радушия.`]],
+o:[
+{t:`Thank you so much for having me! It smells amazing.`,tr:`Огромное спасибо, что пригласили! Пахнет потрясающе.`,q:`best`,r:`family`,w:`«Thank you for having me» — стандартная благодарность хозяевам. Комплимент запаху сразу создаёт тёплую атмосферу — лучше, чем просто «да/нет».`,re:`Grandma beams: «Oh, you're a doll!»`},
+{t:`I am very hungry, please give me eat.`,tr:`Я очень голоден, пожалуйста, дайте мне есть.`,q:`bad`,r:`family`,w:`Ошибка в «give me eat»: после give нужен объект — «something to eat». Просьба «please give me» вообще звучит резко; в семье лучше «I'd love some» или «that smells great».`,re:`Grandma blinks: «Eat? Of course, dear — sit down.»`},
+{t:`Not hungry, thanks.`,tr:`Не голоден, спасибо.`,q:`off`,r:`casual`,w:`Грамматика ок, но тон холодный. В семье отказ от еды смягчают: «I'm okay for now, thanks! It smells great though».`,re:`Grandma: «Oh. Well… I'll leave some out for later.»`}
+]},
+{npc:`Do you like the casserole? Be honest now.`,ru:`Тебе нравится запеканка? Только честно.`,
+lens:[[`casserole`,`Запеканка в одной форме, американская домашняя классика.`],[`Be honest now`,`Игривая фраза, а не просьба о критике. Ожидаемый ответ — похвала с деталями.`]],
+o:[
+{t:`It's delicious! Could I have the recipe? My mom would love it.`,tr:`Очень вкусно! Можно мне рецепт? Моей маме бы понравилось.`,q:`best`,r:`family`,w:`«Could I have the recipe?» — лучший комплимент повару. «My mom would love it» — would: гипотетическая реакция мамы. Конкретика звучит искренне.`,re:`Grandma blushes: «I'll write it down for you!»`},
+{t:`It's okay, but a little bit too salty for me.`,tr:`Нормально, но для меня немного пересолено.`,q:`off`,r:`casual`,w:`Это искренне, но «be honest now» — игривая фраза, а не просьба о критике. В английской семейной культуре критику смягчают, сначала хваля: «It's really good — maybe a touch less salt for me, but I'd eat it all day».`,re:`Grandma: «Oh… I'll watch the salt next time.» She sounds a little hurt.`},
+{t:`It tastes very good, I'm liking it.`,tr:`На вкус очень хорошо, мне нравится.`,q:`ok`,r:`family`,w:`«Like» — глагол состояния, обычно без -ing: «I like it». Исключение — слоган «I'm lovin' it»; в современной неформальной речи «I'm liking this» встречается, но на экзаменах и в учебниках это ошибка. Допустимо, но не лучшее.`,re:`Grandma: «Well, I'm glad, honey!»`}
+]},
+{npc:`Would you like some more? There's plenty.`,ru:`Хочешь ещё? Тут много.`,
+lens:[[`some more`,`В предложениях еды используют some, а не any: «Would you like some more?». Any — в вопросах и отрицаниях.`],[`plenty`,`«Много, с избытком» — аналог «хватит на всех».`]],
+o:[
+{t:`I'd love some more, thank you — but just a small piece, please.`,tr:`С удовольствием ещё, спасибо — только маленький кусочек, пожалуйста.`,q:`best`,r:`family`,w:`«I'd love some more» — тёплое согласие. «Just a small piece, please» — вежливо ограничивает порцию. «Some» в предложениях согласия, «any» — в вопросах и отрицаниях.`,re:`Grandma: «That's my boy!» and serves a small piece.`},
+{t:`Yes, more.`,tr:`Да, ещё.`,q:`off`,r:`casual`,w:`Односложно и холодно. В семье короткие ответы читаются как недовольство или безразличие. Добавь «please», «thank you» или комплимент.`,re:`Grandma: «Alright, alright, here you go.»`},
+{t:`No, thank you, I'm full. It was wonderful, though.`,tr:`Нет, спасибо, я сыт. Но было чудесно.`,q:`best`,r:`family`,w:`Отказ без обиды: «No, thank you» + причина (I'm full) + комплимент. «Though» в конце смягчает. Это тоже «отлично» — важно смягчить отказ, а не только согласиться.`,re:`Grandma: «Oh, you sweet thing.»`}
+]}
+],
+keys:[
+{en:`Thank you so much for having me!`,ru:`Огромное спасибо, что пригласили!`,note:`Благодарность хозяевам. have someone = принимать гостя.`,k:`for having me`},
+{en:`I'd love some more, thank you.`,ru:`С удовольствием ещё немного, спасибо.`,note:`I'd love — тёплое «хочу». some — в предложениях и согласии, any — в вопросах и отрицаниях.`,k:`I'd love some more`},
+{en:`No, thank you, I'm full. It was wonderful, though.`,ru:`Нет, спасибо, я сыт. Но было чудесно.`,note:`Отказ + причина + комплимент. though в конце смягчает.`,k:`though`}
+]},
+
+{id:`prof`,reg:`book`,t:`Разговор о романе`,set:`Ты в книжном клубе с профессором литературы, разбираете роман. Здесь ценят точные слова и сложные конструкции.`,
+steps:[
+{npc:`I trust you've finished the novel. What struck you most about it?`,ru:`Надеюсь, ты дочитал роман. Что поразило тебя больше всего?`,
+lens:[[`I trust (that)…`,`«Полагаю, что…» — вежливо-формальное. Звучит книжно.`],[`struck`,`Strike — поразить, привлечь внимание (в таком значении).`]],
+o:[
+{t:`What struck me most was its restraint: the author never explains the characters' grief, yet it permeates every page.`,tr:`Больше всего меня поразила сдержанность: автор нигде не объясняет горе героев, но оно пронизывает каждую страницу.`,q:`best`,r:`book`,w:`«What struck me most was…» — конструкция для акцента. «Restraint» (сдержанность) и «permeates» (пронизывает) — точные слова вместо «good/sad». «Yet» — литературная связка вместо «but».`,re:`The professor leans forward: «Yes — exactly. Go on.»`},
+{t:`It was a really good book, I liked it a lot, it was very interesting.`,tr:`Это была очень хорошая книга, мне очень понравилось, очень интересно.`,q:`ok`,r:`casual`,w:`Ошибок нет, но «really good, liked a lot, very interesting» — пустые усилители без конкретики. В литературной беседе ценится «почему и чем», а не «хорошо».`,re:`The professor: «Mm. Can you be more specific?»`},
+{t:`The book is like, super deep and stuff.`,tr:`Книга такая, ну, супер глубокая и всё такое.`,q:`off`,r:`casual`,w:`«Like, super deep and stuff» — разговорные заполнители. Среди друзей нормально, но с профессором звучит как отсутствие мысли.`,re:`The professor: «Deep, in what sense?»`}
+]},
+{npc:`Interesting. And how would you characterise the protagonist's decision at the end?`,ru:`Интересно. А как бы ты охарактеризовал решение героя в конце?`,
+lens:[[`characterise`,`Британская орфография; американцы пишут characterize. Значение: охарактеризовать, дать оценку.`],[`protagonist`,`Главный герой произведения. Антагонист — его противник.`]],
+o:[
+{t:`I'd call it a quiet act of defiance — less a victory than a refusal to be defined by loss.`,tr:`Я бы назвал это тихим актом неповиновения — не столько победой, сколько отказом быть определённым потерей.`,q:`best`,r:`book`,w:`«I'd call it…» — осторожная оценка, а не категоричное «It is». «Less X than Y» — «не столько X, сколько Y». «Defiance» — вызов, непокорность.`,re:`He smiles: «Defiance. I like that.»`},
+{t:`He did it because he was sad and wanted to leave.`,tr:`Он сделал это, потому что ему было грустно и он хотел уйти.`,q:`ok`,r:`casual`,w:`Понятно и без ошибок, но упрощённо: нет оттенков. Литературный регистр ждёт точных слов: choice, grief, resignation, defiance.`,re:`He: «True, but why? What does he refuse?»`},
+{t:`The protagonist makes decision at the end what is ambiguous.`,tr:`Главный герой принимает решение в конце, что неоднозначно.`,q:`bad`,r:`book`,w:`Две ошибки: «makes a decision» — нужен артикль (в русском его нет); «what is ambiguous» — нужно «which is ambiguous» (what = «то, что»; which присоединяет придаточное к уже названному). Лучше: «makes a decision at the end, which is ambiguous» или «makes an ambiguous decision».`,re:`He frowns slightly: «I'm sorry — which decision is ambiguous?»`}
+]},
+{npc:`I'd be curious whether you found the ending convincing.`,ru:`Мне интересно, показался ли тебе финал убедительным.`,
+lens:[[`I'd be curious whether`,`«Мне интересно, считаете ли вы» — вежливый вопрос вместо прямого «Did you find…?».`],[`convincing`,`Убедительный, правдоподобный.`]],
+o:[
+{t:`On the whole, yes, although I would have preferred a more open-ended resolution.`,tr:`В целом да, хотя я бы предпочёл более открытый финал.`,q:`best`,r:`book`,w:`«On the whole» = в целом. «Although» = хотя. «Would have preferred» — ретроспективное желание о том, что уже написано. «Open-ended» = с открытым финалом.`,re:`He: «A fair point. Let's talk about that ending.»`},
+{t:`Yes, but if the author wrote it differently I would like it more.`,tr:`Да, но если бы автор написал иначе, мне бы понравилось больше.`,q:`bad`,r:`book`,w:`Нереальное условие о прошлом: if + Past Perfect, would have + V3 → «If the author had written it differently, I would have liked it more». «Wrote… would like» — второе условное, про настоящее.`,re:`He: «You mean, if the author had written it differently?»`},
+{t:`Honestly? It's meh. Lowkey disappointed.`,tr:`Честно? Так себе. Слегка разочарован.`,q:`off`,r:`casual`,w:`«Meh» и «lowkey» — сленг. Среди друзей нормально; в литературной дискуссии ждут аргумент. Здесь не ошибка, а несоответствие регистру.`,re:`He: «'Meh'? Let's find a more precise word.»`}
+]}
+],
+keys:[
+{en:`What struck me most was its restraint.`,ru:`Больше всего меня поразила её сдержанность.`,note:`What struck me most was… — конструкция-акцент; restraint = сдержанность.`,k:`What struck me most`},
+{en:`On the whole, yes, although I would have preferred a more open-ended resolution.`,ru:`В целом да, хотя я бы предпочёл более открытую развязку.`,note:`On the whole = в целом. would have preferred — ретроспективное желание.`,k:`would have preferred`},
+{en:`If the author had written it differently, I would have liked it more.`,ru:`Если бы автор написал это иначе, мне бы понравилось больше.`,note:`Нереальное прошлое: if + had V3, would have V3.`,k:`had written`}
+]}
+];
+
+let V={tab:'q'};
+
+function dueCount(){const t=today();return Object.values(S.cards).filter(c=>c.due<=t).length}
+function dots(n){return `<span class="dots">${[1,2,3,4,5].map(i=>`<i class="${i<=n?'on':''}"></i>`).join('')}</span>`}
+
+function page(body){
+ const due=dueCount();
+ $('#app').innerHTML=`<div class="hd"><b>Tone</b><div><span class="chip">🔥 ${S.streak}</span><span class="chip">⭐ ${S.xp}</span><span class="chip" onclick="go('set')">⚙</span></div></div>${body}
+ <nav>${[['q','🎭','Квесты'],['r','🧠','Повтор'+(due?' ('+due+')':'')],['d','📡','Радар'],['t','🪤','Ловушки']].map(a=>`<button class="${V.tab===a[0]?'on':''}" onclick="go('${a[0]}')"><span>${a[1]}</span>${a[2]}</button>`).join('')}</nav>`;
+ window.scrollTo(0,0);
+}
+function go(t){({q:home,r:revHome,d:radar,t:traps,set:settings})[t]()}
+
+function home(){
+ V.tab='q';
+ page(SC.map((sc,i)=>{const R=REG[sc.reg],d=S.done[sc.id];return `<div class="card q" onclick="intro(${i})"><div style="font-size:18px"><b>${R.e} ${esc(sc.t)}</b></div><div class="mu">${R.n} · строгость ${dots(R.s)}</div><div class="mu">${d?'★'.repeat(d.stars)+'☆'.repeat(3-d.stars):'не пройдено'}</div></div>`}).join(''));
+}
+function intro(i){
+ V.tab='q';V.si=i;const sc=SC[i],R=REG[sc.reg];
+ page(`<button class="mini" onclick="home()">← назад</button><div class="card"><h2 style="margin:0 0 6px">${R.e} ${esc(sc.t)}</h2><p>${esc(sc.set)}</p></div><div class="card"><b>Регистр: ${R.n}</b><div style="margin:6px 0">Строгость грамматики: ${dots(R.s)}</div><p><b style="color:var(--ok)">Прощается:</b> ${esc(R.ok)}</p><p><b style="color:var(--bad)">Не прощается:</b> ${esc(R.no)}</p></div><button class="btn" onclick="startScene()">Начать</button>`);
+}
+function startScene(){V.st=0;V.score=0;V.pick=null;V.ord=shuffle(SC[V.si].steps[0].o.map((_,i)=>i));step()}
+function step(){
+ const sc=SC[V.si],st=sc.steps[V.st],R=REG[sc.reg],p=V.pick;
+ let h=`<button class="mini" onclick="home()">← выйти</button><div class="mu" style="margin-top:8px">${R.e} ${R.n} · шаг ${V.st+1} из ${sc.steps.length}</div>
+ <div class="npc"><div>${esc(st.npc)}</div><div class="row"><button class="mini" onclick="say(SC[V.si].steps[V.st].npc)">🔈</button><button class="mini" onclick="document.getElementById('ru').classList.toggle('hide')">RU</button></div><div id="ru" class="ru hide">${esc(st.ru)}</div></div>
+ <details><summary>🔍 Нюансы слов в реплике</summary>${st.lens.map(l=>`<p><b>${esc(l[0])}</b> — ${esc(l[1])}</p>`).join('')}</details>`;
+ if(p===null){
+  h+=V.ord.map(k=>`<button class="opt" onclick="pick(${k})">${esc(st.o[k].t)}</button>`).join('');
+ }else{
+  h+=V.ord.map(k=>{const o=st.o[k],q=Q[o.q];return `<div class="res ${k===p?'sel':''}" style="border-color:${q[1]}"><div class="vt" style="color:${q[1]}">${k===p?'Твой выбор · ':''}${q[0]}</div><div class="en">${esc(o.t)}</div><div class="mu">${esc(o.tr)}</div><p>${esc(o.w)}</p><div class="tag">Живёт в регистре: ${REG[o.r].e} ${REG[o.r].n}</div>${k===p?`<div class="re">${esc(o.re)}</div>`:''}</div>`}).join('')+`<button class="btn" onclick="nextStep()">${V.st+1<sc.steps.length?'Дальше':'Завершить'}</button>`;
+ }
+ page(h);
+ if(p!==null){const e=document.querySelector('.res.sel');if(e)e.scrollIntoView({block:'start'})}
+}
+function pick(k){
+ const o=SC[V.si].steps[V.st].o[k];V.pick=k;V.score+=P[o.q];xp(P[o.q]*2);
+ if(o.q==='off'||o.q==='bad'){S.traps=S.traps.filter(x=>x.t!==o.t);S.traps.unshift({t:o.t,tr:o.tr,q:o.q,w:o.w,r:o.r});S.traps=S.traps.slice(0,60);save()}
+ step();
+}
+function nextStep(){
+ V.st++;
+ if(V.st>=SC[V.si].steps.length){finishScene();return}
+ V.pick=null;V.ord=shuffle(SC[V.si].steps[V.st].o.map((_,i)=>i));step();
+}
+function finishScene(){
+ const sc=SC[V.si],max=sc.steps.length*3,pct=V.score/max,stars=pct>=.8?3:pct>=.55?2:1;
+ const prev=S.done[sc.id];if(!prev||prev.stars<stars)S.done[sc.id]={score:V.score,max,stars};
+ let added=0;
+ sc.keys.forEach((k,i)=>{const id=sc.id+i;if(!S.cards[id]){S.cards[id]={id,en:k.en,ru:k.ru,note:k.note,k:k.k,reg:sc.reg,box:0,due:today()};added++}});
+ xp(10+V.score*3);
+ page(`<div class="card"><h2 style="margin:0">${'★'.repeat(stars)+'☆'.repeat(3-stars)}</h2><p>Очки: ${V.score} из ${max}. ${stars===3?'Ты чувствуешь регистр.':stars===2?'Хорошо, но есть что дотянуть: загляни в «Ловушки».':'Не страшно: пройди ещё раз и сравни разборы.'}</p></div><div class="card"><b>Фразы сцены (новых в повторении: ${added})</b>${sc.keys.map(k=>`<p><b>${esc(k.en)}</b><br><span class="mu">${esc(k.ru)}</span><br>${esc(k.note)}</p>`).join('')}</div><button class="btn" onclick="home()">К квестам</button><button class="btn s" onclick="intro(${V.si})">Пройти ещё раз</button>`);
+}
+
+function revHome(){
+ V.tab='r';const all=Object.values(S.cards),d=dueCount();
+ page(`<div class="card"><b>На повторение сегодня: ${d}</b><div class="mu">Всего фраз: ${all.length}. Режимы усложняются вместе с памятью: собрать из слов, затем вставить пропуск, затем вспомнить целиком.</div>${d?`<button class="btn" onclick="startRev()">Начать</button>`:''}</div>
+ <div class="card"><b>Добавить свою фразу</b><div class="mu">Услышал или прочитал что-то — внеси сюда целиком, в составе предложения.</div><input id="ne" placeholder="English phrase" autocapitalize="off"><input id="nr" placeholder="Перевод / смысл"><input id="nn" placeholder="Заметка: где уместно, почему так (необязательно)"><button class="btn s" onclick="addCard()">Добавить</button></div>
+ ${all.map(c=>`<div class="card"><div>${esc(c.en)}</div><div class="mu">${esc(c.ru)} · уровень ${c.box}/5</div></div>`).join('')}`);
+}
+function addCard(){
+ const en=$('#ne').value.trim(),ru=$('#nr').value.trim(),nn=$('#nn').value.trim();
+ if(!en||!ru){alert('Нужны фраза и перевод');return}
+ const w=en.split(/\s+/).map(x=>x.replace(/[^\w']/g,'')).filter(Boolean).sort((a,b)=>b.length-a.length)[0]||en;
+ const id='u'+Date.now();S.cards[id]={id,en,ru,note:nn,k:w,reg:null,box:0,due:today()};xp(2);revHome();
+}
+function startRev(){
+ const t=today();V.q=shuffle(Object.values(S.cards).filter(c=>c.due<=t).map(c=>c.id)).slice(0,12);V.retry={};V.n=0;V.ok=0;nextCard();
+}
+function nextCard(){
+ if(!V.q.length){page(`<div class="card"><h2>Готово</h2><p>Верно: ${V.ok} из ${V.n}. Карточки вернутся по расписанию интервалов.</p><button class="btn" onclick="revHome()">Ок</button></div>`);return}
+ V.cur=V.q.shift();const c=S.cards[V.cur];
+ V.mode=c.box<2?'build':(c.box<4&&c.en.includes(c.k)?'cloze':'type');
+ if(V.mode==='build'){V.tok=shuffle(c.en.split(/\s+/).map((w,i)=>({w,i})));V.used=[]}
+ cardView();
+}
+function cardView(){
+ const c=S.cards[V.cur];
+ let b=`<div class="mu">Режим: ${{build:'собери фразу',cloze:'вставь пропуск',type:'вспомни целиком'}[V.mode]}${c.reg?' · '+REG[c.reg].e+' '+REG[c.reg].n:''}</div><div class="npc">${esc(c.ru)}</div>`;
+ if(V.mode==='build'){
+  b+=`<div class="ans">${V.used.map(i=>`<button class="tile" onclick="unuse(${i})">${esc(V.tok[i].w)}</button>`).join('')}</div><div>${V.tok.map((t,i)=>V.used.includes(i)?'':`<button class="tile" onclick="use(${i})">${esc(t.w)}</button>`).join('')}</div><button class="btn" onclick="checkCard()">Проверить</button>`;
+ }else{
+  if(V.mode==='cloze')b+=`<div class="card">${esc(c.en.replace(c.k,'_____'))}</div>`;
+  b+=`<input id="ci" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="${V.mode==='cloze'?'пропущенное':'фраза по-английски'}"><button class="btn" onclick="checkCard()">Проверить</button>`;
+ }
+ page(b);
+}
+function use(i){V.used.push(i);cardView()}
+function unuse(i){V.used=V.used.filter(x=>x!==i);cardView()}
+function grade(ok){
+ const c=S.cards[V.cur];c.box=ok?Math.min(5,c.box+1):Math.max(0,c.box-2);c.due=addDays(INT[c.box]);
+ if(!ok&&!V.retry[c.id]){V.retry[c.id]=1;V.q.push(c.id)}
+ xp(ok?4:1);save();
+}
+function checkCard(){
+ const c=S.cards[V.cur];let got,want;
+ if(V.mode==='build'){got=V.used.map(i=>V.tok[i].w).join(' ');want=c.en}
+ else{got=$('#ci').value;want=V.mode==='cloze'?c.k:c.en}
+ const ok=norm(got)===norm(want);V.n++;
+ if(ok){V.ok++;grade(true)}
+ page(`<div class="card" style="border:2px solid ${ok?'var(--ok)':'var(--bad)'}"><b>${ok?'Верно':'Не совсем'}</b><div class="en" style="margin-top:6px">${esc(c.en)}</div><div class="mu">${esc(c.ru)}</div>${c.note?`<p>${esc(c.note)}</p>`:''}${ok?'':`<div class="mu">Твой ответ: ${esc(got)||'—'}</div>`}<button class="mini" style="margin-top:8px" onclick="say(S.cards['${c.id}'].en)">🔈</button></div>${ok?'':`<button class="btn s" onclick="ovr()">Это опечатка — засчитать</button>`}<button class="btn" onclick="${ok?'':'grade(false);'}nextCard()">Дальше</button>`);
+}
+function ovr(){V.ok++;grade(true);nextCard()}
+
+function pool(){const a=[];SC.forEach(sc=>sc.steps.forEach(st=>st.o.forEach(o=>{if(o.q!=='bad')a.push(o)})));return a}
+function radar(){V.tab='d';const p=pool();V.rd=p[Math.floor(Math.random()*p.length)];V.rda=null;radarView()}
+function radarView(){
+ const o=V.rd;
+ let b=`<div class="card"><b>Радар регистров</b><div class="mu">Определи, где живёт эта фраза. Так вырабатывается «чувство ноты».</div></div><div class="npc">${esc(o.t)}</div>`;
+ if(V.rda===null){b+=Object.keys(REG).map(k=>`<button class="opt" onclick="rAns('${k}')">${REG[k].e} ${REG[k].n}</button>`).join('')}
+ else{const ok=V.rda===o.r;b+=`<div class="card" style="border:2px solid ${ok?'var(--ok)':'var(--bad)'}"><b>${ok?'Верно':'Нет'} — это: ${REG[o.r].e} ${REG[o.r].n}</b><div class="mu">${esc(o.tr)}</div><p>${esc(o.w)}</p></div><button class="btn" onclick="radar()">Следующая</button>`}
+ page(b);
+}
+function rAns(k){V.rda=k;if(k===V.rd.r)xp(3);radarView()}
+
+function traps(){
+ V.tab='t';
+ page(`<div class="card"><b>Журнал ловушек</b><div class="mu">Варианты, на которые ты попался. Перечитывай: ошибки запоминаются, когда видишь их снова.</div></div>`+(S.traps.length?S.traps.map(x=>`<div class="res" style="border-color:${Q[x.q][1]}"><div class="vt" style="color:${Q[x.q][1]}">${Q[x.q][0]}</div><div class="en">${esc(x.t)}</div><div class="mu">${esc(x.tr)}</div><p>${esc(x.w)}</p></div>`).join('')+`<button class="btn s" onclick="if(confirm('Очистить журнал?')){S.traps=[];save();traps()}">Очистить</button>`:`<div class="card mu">Пока пусто. Ошибки из квестов появятся здесь.</div>`));
+}
+
+function settings(){
+ V.tab='set';
+ page(`<div class="card"><b>Резервная копия</b><div class="mu">Прогресс хранится в браузере телефона. Скопируй текст ниже и сохрани, чтобы не потерять.</div><textarea id="ex" rows="5" readonly onclick="this.select()">${esc(JSON.stringify(S))}</textarea><div class="mu" style="margin-top:8px">Восстановить: вставь сохранённый текст.</div><textarea id="im" rows="3"></textarea><button class="btn s" onclick="imp()">Восстановить</button><button class="btn s" onclick="if(confirm('Стереть весь прогресс?')){localStorage.removeItem(KEY);location.reload()}">Сбросить всё</button></div>`);
+}
+function imp(){try{const x=JSON.parse($('#im').value);if(!x||typeof x!=='object'||!x.cards)throw 0;S=x;save();home()}catch(e){alert('Не получилось прочитать текст')}}
+
+home();
+</script>
+</body>
+</html>
